@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Request Debug</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .pending { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .approved { background-color: #d4edda; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+        .output { background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Fund Request Status Debug Tool</h1>
+    
+    <div>
+        <button onclick="connectWallet()">Connect MetaMask</button>
+        <button onclick="registerCharity()">Register & Approve Charity</button>
+        <button onclick="makeTestDonation()">Make Test Donation</button>
+        <button onclick="createFundRequest()">Create Fund Request</button>
+        <button onclick="checkFundRequests()">Check All Fund Requests</button>
+    </div>
+
+    <div id="output" class="output">
+        <p>Ready to test. Please connect MetaMask and make sure you're on localhost:8545</p>
+    </div>
+
+    <script>
+        const CONTRACT_ADDRESSES = {
+            CharityRegistry: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+            CharityToken: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", 
+            DonationPlatform: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+        };
+
+        const DONATION_PLATFORM_ABI = [
+            "function createFundRequest(uint256 _amount, string memory _purpose, string memory _description) public",
+            "function getFundRequestsCount() public view returns (uint256 count)",
+            "function getFundRequestDetails(uint256 _requestId) public view returns (address charityAddress, uint256 amount, string memory purpose, string memory description, uint8 status, uint256 requestDate, uint256 completionDate)",
+            "function donateETH(address _charity, string memory _message) public payable",
+            "function charityBalances(address charity, address token) public view returns (uint256)",
+            "function updateFundRequestStatus(uint256 _requestId, uint8 _newStatus) public",
+            "function withdrawFunds(uint256 _requestId, address _tokenAddress) public"
+        ];
+
+        const CHARITY_REGISTRY_ABI = [
+            "function registerCharity(string memory _name, string memory _description, address _charityAddress, string memory _website, string memory _contactInformation) public",
+            "function updateCharityStatus(address _charityAddress, uint8 _status) public",
+            "function isCharityApproved(address _charityAddress) public view returns (bool)"
+        ];
+
+        let provider, signer, donationPlatform, charityRegistry;
+
+        async function connectWallet() {
+            try {
+                if (!window.ethereum) {
+                    log("Please install MetaMask!");
+                    return;
+                }
+
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                const account = await signer.getAddress();
+                const network = await provider.getNetwork();
+                
+                log(`Connected to ${account} on network ${network.chainId}`);
+                
+                // Initialize contracts
+                donationPlatform = new ethers.Contract(CONTRACT_ADDRESSES.DonationPlatform, DONATION_PLATFORM_ABI, signer);
+                charityRegistry = new ethers.Contract(CONTRACT_ADDRESSES.CharityRegistry, CHARITY_REGISTRY_ABI, signer);
+                
+                log("Contracts initialized successfully!");
+                
+            } catch (error) {
+                log(`Error connecting: ${error.message}`, "error");
+            }
+        }
+
+        async function registerCharity() {
+            try {
+                if (!signer) {
+                    log("Please connect wallet first!", "error");
+                    return;
+                }
+
+                const account = await signer.getAddress();
+                log(`Registering charity for account: ${account}`);
+
+                // Register charity
+                const tx1 = await charityRegistry.registerCharity(
+                    "Test Charity", 
+                    "A test charity for debugging",
+                    account,
+                    "https://test.com", 
+                    "test@test.com"
+                );
+                await tx1.wait();
+                log("✅ Charity registered");
+
+                // Need to approve with owner account - this should be done by contract owner
+                // For testing, we'll try but it might fail if we're not the owner
+                try {
+                    const tx2 = await charityRegistry.updateCharityStatus(account, 1); // 1 = Approved
+                    await tx2.wait();
+                    log("✅ Charity approved");
+                } catch (approveError) {
+                    log(`⚠️ Could not approve charity (need owner account): ${approveError.message}`, "error");
+                    log("You may need to approve the charity using the owner account");
+                }
+
+            } catch (error) {
+                log(`Error registering charity: ${error.message}`, "error");
+            }
+        }
+
+        async function makeTestDonation() {
+            try {
+                if (!signer) {
+                    log("Please connect wallet first!", "error");
+                    return;
+                }
+
+                const account = await signer.getAddress();
+                const donationAmount = ethers.utils.parseEther("5.0");
+                
+                log(`Making test donation of 5 ETH to charity ${account}`);
+                
+                const tx = await donationPlatform.donateETH(account, "Test donation for debugging", {
+                    value: donationAmount
+                });
+                await tx.wait();
+                
+                // Check charity balance
+                const balance = await donationPlatform.charityBalances(account, ethers.constants.AddressZero);
+                const balanceEth = ethers.utils.formatEther(balance);
+                
+                log(`✅ Donation complete! Charity balance: ${balanceEth} ETH`);
+                
+            } catch (error) {
+                log(`Error making donation: ${error.message}`, "error");
+            }
+        }
+
+        async function createFundRequest() {
+            try {
+                if (!signer) {
+                    log("Please connect wallet first!", "error");
+                    return;
+                }
+
+                const requestAmount = ethers.utils.parseEther("2.0");
+                log("Creating fund request for 2 ETH...");
+
+                const tx = await donationPlatform.createFundRequest(
+                    requestAmount,
+                    "Emergency Relief", 
+                    "Test fund request to debug status issue"
+                );
+                await tx.wait();
+
+                log("✅ Fund request created! Checking its status...");
+                
+                // Immediately check the status of the newly created request
+                await checkFundRequests();
+
+            } catch (error) {
+                log(`Error creating fund request: ${error.message}`, "error");
+            }
+        }
+
+        async function checkFundRequests() {
+            try {
+                if (!donationPlatform) {
+                    log("Please connect wallet first!", "error");
+                    return;
+                }
+
+                const count = await donationPlatform.getFundRequestsCount();
+                log(`\n=== FUND REQUESTS DEBUG (Total: ${count}) ===`);
+
+                if (count.eq(0)) {
+                    log("No fund requests found");
+                    return;
+                }
+
+                for (let i = 0; i < count; i++) {
+                    log(`\n--- Fund Request ${i} ---`);
+                    
+                    const details = await donationPlatform.getFundRequestDetails(i);
+                    const [charity, amount, purpose, description, status, requestDate, completionDate] = details;
+                    
+                    const statusName = getStatusName(status);
+                    const amountEth = ethers.utils.formatEther(amount);
+                    const reqDate = new Date(requestDate * 1000).toLocaleString();
+                    
+                    log(`Charity: ${charity}`);
+                    log(`Amount: ${amountEth} ETH`);
+                    log(`Purpose: ${purpose}`);
+                    log(`Status Code: ${status}`);
+                    log(`Status Name: ${statusName}`, status === 0 ? "pending" : status === 1 ? "approved" : "error");
+                    log(`Request Date: ${reqDate}`);
+                    
+                    // This is the key check - new requests should be Pending (0)
+                    if (status === 0) {
+                        log("✅ CORRECT: Fund request is Pending (status = 0)", "pending");
+                    } else if (status === 1) {
+                        log("❌ ISSUE FOUND: Fund request shows as Approved (status = 1) instead of Pending!", "error");
+                    } else {
+                        log(`❓ UNEXPECTED: Fund request has status ${status}`, "error");
+                    }
+                }
+
+            } catch (error) {
+                log(`Error checking fund requests: ${error.message}`, "error");
+            }
+        }
+
+        function getStatusName(status) {
+            switch (Number(status)) {
+                case 0: return "Pending";
+                case 1: return "Approved"; 
+                case 2: return "Rejected";
+                case 3: return "Completed";
+                default: return "Unknown";
+            }
+        }
+
+        function log(message, type = "info") {
+            const output = document.getElementById("output");
+            const div = document.createElement("div");
+            div.className = `status ${type}`;
+            div.textContent = message;
+            output.appendChild(div);
+            console.log(message);
+            
+            // Auto scroll to bottom
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Clear output on page load
+        window.addEventListener('load', () => {
+            document.getElementById("output").innerHTML = "<p>Ready to test. Please connect MetaMask and make sure you're on localhost:8545</p>";
+        });
+    </script>
+</body>
+</html>

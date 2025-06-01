@@ -1,0 +1,3 @@
+console.log(accounts);
+const accounts = await ethers.provider.listAccount
+const signers = await ethers.getSigners();
