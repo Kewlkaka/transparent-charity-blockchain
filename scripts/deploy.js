@@ -28,13 +28,11 @@ async function main() {
   const charityToken = await CharityToken.deploy(initialSupply);
   await charityToken.waitForDeployment();
   console.log("CharityToken deployed to:", charityToken.target);
-
   const DonationPlatform = await hre.ethers.getContractFactory(
     "DonationPlatform"
   );
   const donationPlatform = await DonationPlatform.deploy(
-    charityRegistry.target,
-    adminAddress
+    charityRegistry.target
   );
   await donationPlatform.waitForDeployment();
   console.log("DonationPlatform deployed to:", donationPlatform.target);

@@ -93,14 +93,13 @@ contract DonationPlatform is Ownable, ReentrancyGuard {
         uint256 indexed requestId,
         uint256 reportDate
     );
-    constructor(address _charityRegistryAddress, address _admin) {
+    constructor(address _charityRegistryAddress) {
         require(
             _charityRegistryAddress != address(0),
             "Invalid charity registry address"
         );
-        require(_admin != address(0), "Admin address cannot be zero");
         charityRegistry = CharityRegistry(_charityRegistryAddress);
-        _transferOwnership(_admin);
+        _transferOwnership(msg.sender);
     }
 
     function donateETH(

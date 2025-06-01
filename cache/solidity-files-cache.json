@@ -111,8 +111,8 @@
       ]
     },
     "C:\\Users\\user\\Documents\\Blockchain\\transparent-charity\\contracts\\DonationPlatform.sol": {
-      "lastModificationDate": 1748433129046,
-      "contentHash": "36ecfe5d4251631b87d74429d689bb3f",
+      "lastModificationDate": 1748775068784,
+      "contentHash": "81ca301b5577e44d3c345eee64e3df64",
       "sourceName": "contracts/DonationPlatform.sol",
       "solcConfig": {
         "version": "0.8.17",
